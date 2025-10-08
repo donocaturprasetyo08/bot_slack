@@ -342,7 +342,7 @@ def handle_app_mention(event):
             """
             slack_bot.send_message(channel, help_message, thread_ts=ts)
     except Exception as e:
-        logger.error(f"Gagal catat, silakan catat manual boss: {str(e)}")
+        logger.error(f"Gagal catat ke list PQF, silakan catat manual boss: {str(e)}")
         help_message = """
             Saat ini bot tidak dapat menindaklanjuti issue melalui kolom komentar. Informasi terkait bug/issue/feedback tersebut sudah kami terima dan sedang diproses oleh tim kami. Pembaruan dan respon akan disampaikan oleh tim kami setelah ada perkembangan lebih lanjut. Terimakasih.
             """
@@ -632,6 +632,8 @@ def process_ticket_command(channel, thread_ts=None):
     logger.info(f"process_ticket_command: WAJIB ambil thread_data dari thread asli: channel={channel_real}, thread_ts={thread_ts_real}")
     thread_data = slack_bot.get_thread_data(channel_real, thread_ts_real)
     parent = thread_data.get('parent_message', {}) if thread_data else {}
+    channel_asli = channel  # simpan channel forward
+    thread_ts_asli = thread_ts  # simpan thread_ts forward
     channel = channel_real
     thread_ts = thread_ts_real
 
@@ -706,7 +708,31 @@ def process_ticket_command(channel, thread_ts=None):
             'note': ''
         }
         try:
-            bug_manager.prepend_row_bug(row_data, sheet_name)
+            is_new_row = bug_manager.prepend_row_bug(row_data, sheet_name)
+            # Jika duplicate (is_new_row == False), skip update related ticket
+            if is_new_row:
+                # Tambahan: update kolom Related Ticket pada spreadsheet utama
+                code_value = code_str
+                link_message = permalink
+                from spreadsheet import SpreadsheetManager
+                spreadsheet_manager = SpreadsheetManager()
+                found = False
+                for sheet in spreadsheet_manager.get_available_sheets():
+                    links = [l.split('&cid=')[0] if l else l for l in spreadsheet_manager.get_all_links(sheet)]
+                    if link_message in links:
+                        updated = spreadsheet_manager.update_column_by_link(sheet, link_message, 'Related Ticket', code_value)
+                        if updated:
+                            logger.info(f"Berhasil update kolom Related Ticket pada sheet {sheet} untuk link {link_message} dengan value {code_value}")
+                        else:
+                            logger.error(f"Gagal update kolom Related Ticket pada sheet {sheet} untuk link {link_message}")
+                        found = True
+                        break
+                if not found:
+                    logger.info(f"Tidak ditemukan sheet yang mengandung link message {link_message} untuk update kolom Related Ticket")
+                # Kirim response ke thread forward (bukan thread asli)
+                slack_bot.send_message(channel_asli, f"✅ Ticketmu sudah tercatat di bug tracking dengan kode: {code_str}", thread_ts=thread_ts_asli)
+            else:
+                logger.info("Duplicate bug detected, skipping update of Related Ticket column.")
         except Exception as e:
             logger.error(f"Error mencatat bug: {str(e)}")
             slack_bot.send_message(channel, f"Gagal mencatat bug: {str(e)}", thread_ts=thread_ts)
