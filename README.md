@@ -65,13 +65,6 @@ SHEET_NAME=Thread Analysis
 # Gemini AI Configuration
 GEMINI_API_KEY=your-gemini-api-key-here
 
-# Flask Configuration
-FLASK_ENV=development
-PORT=3000
-USE_NGROK=true
-NGROK_AUTH_TOKEN=your-ngrok-auth-token-here
-```
-
 ### 6. Konfigurasi ngrok (Opsional untuk Development)
 
 Untuk development lokal, bot akan otomatis menggunakan ngrok:
