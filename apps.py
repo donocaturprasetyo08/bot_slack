@@ -151,8 +151,8 @@ def handle_app_mention(event):
                     analysis = gemini_analyzer.analyze_thread(thread_data)
                     if analysis:
                         product_raw = (analysis.get('product') or '').strip().lower()
-                        agentlabs_keywords = ['agentlabs', 'llm', 'intent base']
-                        appcenter_keywords = ['shopee', 'email', 'qcrm', 'appcenter', 'survey', 'tokopedia', 'email broadcast']
+                        agentlabs_keywords = ['agentlabs', 'llm', 'intent base', 'dialogflow']
+                        appcenter_keywords = ['shopee', 'email', 'qcrm', 'appcenter', 'survey', 'tokopedia', 'email broadcast', 'tiktok', 'CSAT', 'agent copilot']
                         if any(k in product_raw for k in agentlabs_keywords):
                             product_sheet = 'Agentlabs'
                         elif any(k in product_raw for k in appcenter_keywords):
