@@ -5,6 +5,8 @@ Google Sheets integration module
 import os
 import logging
 import json
+import base64
+import binascii
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -163,12 +165,19 @@ class SpreadsheetManager:
 
     def __init__(self):
         """Initialize Google Sheets manager"""
+        raw_credentials_json_b64 = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON_B64')
         raw_credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
         self.credentials_file = os.getenv('GOOGLE_SHEETS_CREDENTIALS_FILES')
         self.credentials_info = None
         self.spreadsheet_id = os.getenv('SPREADSHEET_ID')
 
-        if raw_credentials_json:
+        if raw_credentials_json_b64:
+            try:
+                decoded_json = base64.b64decode(raw_credentials_json_b64).decode('utf-8')
+                self.credentials_info = json.loads(decoded_json)
+            except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ValueError("GOOGLE_APPLICATION_CREDENTIALS_JSON_B64 environment variable must be valid Base64-encoded JSON") from exc
+        elif raw_credentials_json:
             try:
                 self.credentials_info = json.loads(raw_credentials_json)
             except json.JSONDecodeError as exc:
