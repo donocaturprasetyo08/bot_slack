@@ -29,9 +29,13 @@ pip install -r requirements.txt
    - `chat:write`
    - `channels:history`
    - `groups:history`
+   - `groups:read`
    - `im:history`
    - `mpim:history`
    - `users:read`
+   - `users:read.email`
+   - `channels:join`
+   - `channels:read`
 4. Install aplikasi ke workspace Slack Anda
 
 ### 3. Konfigurasi Google Sheets
