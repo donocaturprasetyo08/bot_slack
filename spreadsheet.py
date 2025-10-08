@@ -4,6 +4,7 @@ Google Sheets integration module
 
 import os
 import logging
+import json
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -162,12 +163,20 @@ class SpreadsheetManager:
 
     def __init__(self):
         """Initialize Google Sheets manager"""
+        raw_credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
         self.credentials_file = os.getenv('GOOGLE_SHEETS_CREDENTIALS_FILES')
+        self.credentials_info = None
         self.spreadsheet_id = os.getenv('SPREADSHEET_ID')
-        
-        if not self.credentials_file:
-            raise ValueError("GOOGLE_SHEETS_CREDENTIALS_FILES environment variable is required")
-        
+
+        if raw_credentials_json:
+            try:
+                self.credentials_info = json.loads(raw_credentials_json)
+            except json.JSONDecodeError as exc:
+                raise ValueError("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable contains invalid JSON") from exc
+
+        if not self.credentials_info and not self.credentials_file:
+            raise ValueError("Either GOOGLE_APPLICATION_CREDENTIALS_JSON or GOOGLE_SHEETS_CREDENTIALS_FILES environment variable is required")
+
         if not self.spreadsheet_id:
             raise ValueError("SPREADSHEET_ID environment variable is required")
         # Removed self.service initialization
@@ -180,10 +189,16 @@ class SpreadsheetManager:
             scopes = ['https://www.googleapis.com/auth/spreadsheets']
             
             # Load credentials
-            credentials = Credentials.from_service_account_file(
-                self.credentials_file,
-                scopes=scopes
-            )
+            if self.credentials_info:
+                credentials = Credentials.from_service_account_info(
+                    self.credentials_info,
+                    scopes=scopes
+                )
+            else:
+                credentials = Credentials.from_service_account_file(
+                    self.credentials_file,
+                    scopes=scopes
+                )
             
             # Build service
             service = build('sheets', 'v4', credentials=credentials)

@@ -62,9 +62,16 @@ SLACK_SIGNING_SECRET=your-signing-secret-here
 SLACK_APP_TOKEN=xapp-your-app-token-here
 
 # Google Sheets Configuration
-GOOGLE_SHEETS_CREDENTIALS_FILE=path/to/your/credentials.json
+# Option A (recommended for managed hosting): inline JSON credentials
+GOOGLE_APPLICATION_CREDENTIALS_JSON={"type":"service_account","project_id":"..."}
+
+# Option B (legacy): absolute path to a mounted credentials file
+GOOGLE_SHEETS_CREDENTIALS_FILES=/path/to/your/credentials.json
+
 SPREADSHEET_ID=your-spreadsheet-id-here
 SHEET_NAME=Thread Analysis
+
+> **Tips:** Platform seperti Railway mendukung nilai environment multiline. Gunakan menu *Bulk Edit* atau tempel langsung JSON service account ke `GOOGLE_APPLICATION_CREDENTIALS_JSON` tanpa perlu menyimpan file fisik di repo.
 
 # Gemini AI Configuration
 GEMINI_API_KEY=your-gemini-api-key-here
@@ -174,6 +181,8 @@ Bot akan menyimpan data berikut ke Google Spreadsheet:
 
 1. Deploy aplikasi ke platform pilihan
 2. Set environment variables
+   - Tempel seluruh isi file service account ke variabel `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+   - (Opsional) Jika tetap memakai file, upload ke storage/volume dan set `GOOGLE_SHEETS_CREDENTIALS_FILES`
 3. Update Request URL di Slack App settings
 4. Pastikan webhook endpoint dapat diakses publik
 
