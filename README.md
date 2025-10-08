@@ -62,7 +62,7 @@ SLACK_SIGNING_SECRET=your-signing-secret-here
 SLACK_APP_TOKEN=xapp-your-app-token-here
 
 # Google Sheets Configuration
-GOOGLE_SHEETS_CREDENTIALS_FILE=path/to/your/service-account-credentials.json
+GOOGLE_SHEETS_CREDENTIALS_FILE=path/to/your/credentials.json
 SPREADSHEET_ID=your-spreadsheet-id-here
 SHEET_NAME=Thread Analysis
 
