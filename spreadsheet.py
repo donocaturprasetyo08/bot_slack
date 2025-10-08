@@ -224,7 +224,7 @@ class SpreadsheetManager:
                 'Status',
                 'Scheduled Release On',
                 'Link Message',
-                'Note'
+                'Related Ticket'
             ]
             num_cols = len(headers)
             last_col = get_column_letter(num_cols)
@@ -302,7 +302,7 @@ class SpreadsheetManager:
                 'Status',
                 'Scheduled Release On',
                 'Link Message',
-                'Note'
+                'Related Ticket'
             ]
             num_cols = len(headers)
             last_col = get_column_letter(num_cols)
@@ -434,7 +434,7 @@ class SpreadsheetManager:
                 'Status',
                 'Scheduled Release On',
                 'Link Message',
-                'Note'
+                'Related Ticket'
             ]
             num_cols = len(headers)
             last_col = get_column_letter(num_cols)
