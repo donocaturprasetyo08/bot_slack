@@ -1,0 +1,19 @@
+# Prevent sensitive and unnecessary files from being copied into Docker image
+.env
+*.env
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# Local development artifacts
+.ngrok2/
+.git/
+.gitignore
