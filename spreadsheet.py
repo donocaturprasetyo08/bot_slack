@@ -178,18 +178,14 @@ class SpreadsheetManager:
         try:
             # Define scopes
             scopes = ['https://www.googleapis.com/auth/spreadsheets']
-            
             # Load credentials
             credentials = Credentials.from_service_account_file(
                 self.credentials_file,
                 scopes=scopes
             )
-            
-            # Build service
-            service = build('sheets', 'v4', credentials=credentials)
-            
+            # Build service without file_cache
+            service = build('sheets', 'v4', credentials=credentials, cache_discovery=False)
             return service
-            
         except Exception as e:
             logger.error(f"Error initializing Google Sheets service: {str(e)}")
             raise
