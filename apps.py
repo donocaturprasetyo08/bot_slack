@@ -36,8 +36,34 @@ slack_bot = SlackBot()
 gemini_analyzer = GeminiAnalyzer()
 spreadsheet_manager = SpreadsheetManager()
 
+
+def _resolve_thread_pool_size() -> int:
+    """Return thread pool size from env or sensible default."""
+    cpu_bound_default = max(2, min(32, (os.cpu_count() or 1) * 5))
+    env_value = os.getenv('THREAD_POOL_MAX_WORKERS')
+    if env_value:
+        try:
+            parsed = int(env_value)
+            if parsed < 1:
+                raise ValueError
+            return parsed
+        except ValueError:
+            logger.warning(
+                "Invalid THREAD_POOL_MAX_WORKERS value '%s'. Falling back to default %s",
+                env_value,
+                cpu_bound_default,
+            )
+    return cpu_bound_default
+
+
+THREAD_POOL_MAX_WORKERS = _resolve_thread_pool_size()
+
 # Inisialisasi ThreadPoolExecutor untuk membatasi worker paralel
-executor = ThreadPoolExecutor(max_workers=2)  # Bisa disesuaikan sesuai kebutuhan
+executor = ThreadPoolExecutor(
+    max_workers=THREAD_POOL_MAX_WORKERS,
+    thread_name_prefix="bot-worker",
+)
+logger.info("ThreadPoolExecutor initialized with %s workers", THREAD_POOL_MAX_WORKERS)
 
 ALLOWED_CHANNELS = os.getenv('ALLOWED_CHANNELS', '').split(',')
 FORWARD_CHANNEL_ID = os.getenv('FORWARD_CHANNEL_ID', '').split(',')

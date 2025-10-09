@@ -61,6 +61,11 @@ SLACK_BOT_TOKEN=xoxb-your-bot-token-here
 SLACK_SIGNING_SECRET=your-signing-secret-here
 SLACK_APP_TOKEN=xapp-your-app-token-here
 
+# Worker Concurrency (optional)
+#   - Defaults to 5 * CPU cores (min 2, max 32)
+#   - Override when hosting platform limits parallel threads
+THREAD_POOL_MAX_WORKERS=8
+
 # Google Sheets Configuration
 # Option A (recommended for managed hosting): inline JSON credentials
 #   - For .env files, wrap in single quotes or escape quotes
