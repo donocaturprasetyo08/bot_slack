@@ -38,7 +38,7 @@ class SpreadsheetBugManager:
 				self.credentials_file,
 				scopes=scopes
 			)
-			service = build('sheets', 'v4', credentials=credentials)
+			service = build('sheets', 'v4', credentials=credentials, cache_discovery=False)
 			return service
 		except Exception as e:
 			logger.error(f"Error initializing Google Sheets service: {str(e)}")
