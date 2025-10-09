@@ -196,7 +196,6 @@ class SpreadsheetManager:
         try:
             # Define scopes
             scopes = ['https://www.googleapis.com/auth/spreadsheets']
-            
             # Load credentials
             if self.credentials_info:
                 credentials = Credentials.from_service_account_info(
@@ -210,10 +209,9 @@ class SpreadsheetManager:
                 )
             
             # Build service
-            service = build('sheets', 'v4', credentials=credentials)
+            service = build('sheets', 'v4', credentials=credentials, cache_discovery=False)
             
             return service
-            
         except Exception as e:
             logger.error(f"Error initializing Google Sheets service: {str(e)}")
             raise
@@ -248,7 +246,7 @@ class SpreadsheetManager:
                 'Status',
                 'Scheduled Release On',
                 'Link Message',
-                'Note'
+                'Related Ticket'
             ]
             num_cols = len(headers)
             last_col = get_column_letter(num_cols)
@@ -326,7 +324,7 @@ class SpreadsheetManager:
                 'Status',
                 'Scheduled Release On',
                 'Link Message',
-                'Note'
+                'Related Ticket'
             ]
             num_cols = len(headers)
             last_col = get_column_letter(num_cols)
@@ -458,7 +456,7 @@ class SpreadsheetManager:
                 'Status',
                 'Scheduled Release On',
                 'Link Message',
-                'Note'
+                'Related Ticket'
             ]
             num_cols = len(headers)
             last_col = get_column_letter(num_cols)
