@@ -40,6 +40,7 @@ spreadsheet_manager = SpreadsheetManager()
 executor = ThreadPoolExecutor(max_workers=2)  # Bisa disesuaikan sesuai kebutuhan
 
 ALLOWED_CHANNELS = os.getenv('ALLOWED_CHANNELS', '').split(',')
+FORWARD_CHANNEL_ID = os.getenv('FORWARD_CHANNEL_ID', '').split(',')
 
 def validate_and_extract_command(text):
     """
@@ -51,43 +52,30 @@ def validate_and_extract_command(text):
     """
     # Remove bot mention and clean text
     text = re.sub(r'<@[^>]+>', '', text).strip().lower()
-    
+
     # Define validation patterns
     valid_froms = ['internal', 'eksternal']
-    valid_quarters = ['q1', 'q2', 'q3', 'q4']
     valid_products = ['agentlabs', 'appcenter']
-    
-    # Pattern to match the command format
-    pattern = r'^(internal|eksternal)\s+pqf\s+(q[1-4])\s+(\d{4})\s+(agentlabs|appcenter)$'
-    match = re.match(pattern, text)
-    
-    if not match:
+
+    # Flexible pattern: find all required keywords in any order
+    from_match = re.search(r'(internal|eksternal)', text)
+    pqf_match = re.search(r'pqf', text)
+    product_match = re.search(r'(agentlabs|appcenter)', text)
+
+    if not (from_match and pqf_match and product_match):
         return None, None, "Format perintah tidak valid"
-    
-    from_value = match.group(1)
-    quarter = match.group(2)
-    year = match.group(3)
-    product = match.group(4)
-    
+
+    from_value = from_match.group(1)
+    product = product_match.group(1)
+
     # Additional validations
     if from_value not in valid_froms:
         return None, None, f"From harus 'internal' atau 'eksternal', bukan '{from_value}'"
-    
-    if quarter not in valid_quarters:
-        return None, None, f"Quarter harus 'q1', 'q2', 'q3', atau 'q4', bukan '{quarter}'"
-    
-    # Validate year (reasonable range)
-    year_int = int(year)
-    if year_int < 2020 or year_int > 2030:
-        return None, None, f"Tahun harus antara 2020-2030, bukan '{year}'"
-    
+
     if product not in valid_products:
         return None, None, f"Product harus 'agentlabs' atau 'appcenter', bukan '{product}'"
-    
-    # Create sheet name
-    sheet_name = f"{quarter.upper()} {year} {product.capitalize()}"
-    
-    return from_value.capitalize(), sheet_name, None
+
+    return from_value.capitalize(), product.capitalize(), None
 
 @app.route('/slack/events', methods=['POST'])
 def slack_events():
@@ -241,23 +229,23 @@ def handle_app_mention(event):
         # Jika reply (bukan parent), baru proses pqf dan validasi
         text_lower = text.lower()
         if 'pqf' in text_lower:
-            from_value, sheet_name, error_message = validate_and_extract_command(text)
+            if channel not in FORWARD_CHANNEL_ID:
+                slack_bot.send_message(
+                    channel,
+                    "Saat ini bot tidak dapat menindaklanjuti issue melalui kolom komentar. Informasi terkait bug/issue/feedback tersebut sudah kami terima dan sedang diproses oleh tim kami. Pembaruan dan respon akan disampaikan oleh tim kami setelah ada perkembangan lebih lanjut. Terimakasih.",
+                    thread_ts=ts
+                )
+                return
+            from_value, product, error_message = validate_and_extract_command(text)
             if error_message:
                 help_message = """
                 Saat ini bot tidak dapat menindaklanjuti issue melalui kolom komentar. Informasi terkait bug/issue/feedback tersebut sudah kami terima dan sedang diproses oleh tim kami. Pembaruan dan respon akan disampaikan oleh tim kami setelah ada perkembangan lebih lanjut. Terimakasih.
                 """
                 slack_bot.send_message(channel, help_message, thread_ts=ts)
                 return
-            if from_value is None or sheet_name is None:
-                slack_bot.send_message(channel, f"<@{user}> ❌ Terjadi kesalahan dalam memproses perintah.", thread_ts=ts)
+            if from_value is None or product is None:
+                logger.info(f" Terjadi kesalahan dalam memproses perintah. {ts}")
                 return
-            logger.info(f"Command parsed - From: {from_value}, Sheet: {sheet_name}")
-            available_sheets = spreadsheet_manager.get_available_sheets()
-            logger.info(f"Available sheets: {available_sheets}")
-            spreadsheet_manager.create_sheet_if_not_exists(sheet_name)
-            logger.info(f"Preparing to insert to sheet: {sheet_name}")
-            import time
-            time.sleep(1)
 
             # --- Ambil thread_data dari thread asli jika event terjadi di channel forward ---
             def parse_slack_permalink(permalink):
@@ -296,6 +284,25 @@ def handle_app_mention(event):
             # --- END ---
 
             if thread_data:
+                # Ambil quarter dan year dari reporting_date_time (parent_ts)
+                parent = thread_data.get('parent_message', {})
+                parent_ts = parent.get('ts')
+                if parent_ts:
+                    from datetime import datetime
+                    dt = datetime.fromtimestamp(float(parent_ts))
+                    bulan = dt.month
+                    tahun = dt.year
+                    if 1 <= bulan <= 3:
+                        quarter = 'Q1'
+                    elif 4 <= bulan <= 6:
+                        quarter = 'Q2'
+                    elif 7 <= bulan <= 9:
+                        quarter = 'Q3'
+                    else:
+                        quarter = 'Q4'
+                    sheet_name = f"{quarter} {tahun} {product}"
+                else:
+                    sheet_name = f"Thread Analysis"
                 permalink = thread_data.get('permalink', '')
                 if '&cid=' in permalink:
                     permalink = permalink.split('&cid=')[0]
@@ -308,11 +315,11 @@ def handle_app_mention(event):
                     )
                 else:
                     executor.submit(process_thread_data, thread_data, channel, user, ts, from_value, sheet_name)
-                    # slack_bot.send_message(
-                    #     channel,
-                    #     f"Laporanmu sudah masuk ke list PQF di sheet {sheet_name} untuk proses tindak lanjut, ya QFolks!",
-                    #     thread_ts=ts
-                    # )
+                    slack_bot.send_message(
+                        channel,
+                        f"✅ Sudah masuk ke List PQF",
+                        thread_ts=ts
+                    )
             else:
                 slack_bot.send_message(
                     channel, 
@@ -352,7 +359,6 @@ def process_thread_data(thread_data, channel, user, thread_ts, from_value="Inter
     """Process thread data with Gemini AI and save to spreadsheet"""
     try:
         # Always initialize ts with thread_ts (from mention)
-        ts = thread_ts
         permalink = thread_data.get('permalink', '')
         if '&cid=' in permalink:
             permalink = permalink.split('&cid=')[0]
@@ -392,7 +398,6 @@ def process_thread_data(thread_data, channel, user, thread_ts, from_value="Inter
                                 reply_ts = reply.get('ts')
                                 if reply_ts and (first_response_ts is None or float(reply_ts) < float(first_response_ts)):
                                     first_response_ts = reply_ts
-                                    ts = reply_ts  # Overwrite ts ONLY if found
                                     found_reply = True
                 for reply in thread_data['replies']:
                     user_id = reply.get('user')
@@ -431,17 +436,6 @@ def process_thread_data(thread_data, channel, user, thread_ts, from_value="Inter
                 from datetime import datetime
                 dt = datetime.fromtimestamp(float(parent_ts))
                 reporting_date_time = dt.strftime('%Y-%m-%d %H:%M')
-                bulan = dt.month
-                tahun = dt.year
-                week_num = ((dt.day - 1) // 7) + 1
-                if 1 <= bulan <= 3:
-                    quarter = 'Q1'
-                elif 4 <= bulan <= 6:
-                    quarter = 'Q2'
-                elif 7 <= bulan <= 9:
-                    quarter = 'Q3'
-                else:
-                    quarter = 'Q4'
             responder_name = ', '.join(responder_names) if responder_names else 'Unknown'
             row_data = {
                 'from': from_value,
@@ -462,18 +456,6 @@ def process_thread_data(thread_data, channel, user, thread_ts, from_value="Inter
             success = spreadsheet_manager.prepend_row(row_data, sheet_name)
             if success:
                 logger.info(f"Successfully added row to sheet: {sheet_name}")
-                import os
-                forward_channel = os.getenv('FORWARD_CHANNEL_ID')
-                if forward_channel and parent_ts:
-                    permalink = thread_data.get('permalink', '')
-                    if '&cid=' in permalink:
-                        permalink = permalink.split('&cid=')[0]
-                        month_name = dt.strftime('%B')
-                    info_text = f"[{quarter}] [{tahun}] [Week {week_num}] [Date {dt.day} - {month_name}] [Tercatat]"
-                    slack_bot.client.chat_postMessage(
-                        channel=forward_channel,
-                        text=info_text + "\n" + permalink
-                    )
             else:
                 logger.error(f"Failed to add row to sheet: {sheet_name}")
                 slack_bot.send_message(
