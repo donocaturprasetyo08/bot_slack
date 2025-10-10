@@ -1,5 +1,6 @@
 import os
 import logging
+import atexit
 from flask import Flask, request, jsonify
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -31,15 +32,43 @@ logging.getLogger("slack_sdk").setLevel(logging.WARNING)
 # Initialize Flask app
 app = Flask(__name__)
 
-# Initialize components
-slack_bot = SlackBot()
-gemini_analyzer = GeminiAnalyzer()
-spreadsheet_manager = SpreadsheetManager()
+class LazyProxy:
+    """Thread-safe lazy loader for heavyweight singletons."""
+
+    def __init__(self, factory):
+        self._factory = factory
+        self._instance = None
+        self._lock = threading.Lock()
+
+    @property
+    def initialized(self) -> bool:
+        return self._instance is not None
+
+    def _get_instance(self):
+        if self._instance is None:
+            with self._lock:
+                if self._instance is None:
+                    self._instance = self._factory()
+        return self._instance
+
+    def __getattr__(self, item):
+        return getattr(self._get_instance(), item)
+
+    def __bool__(self):  # pragma: no cover - allow truthiness checks
+        return True
+
+
+# Initialize components lazily to avoid upfront memory spikes
+slack_bot = LazyProxy(SlackBot)
+gemini_analyzer = LazyProxy(GeminiAnalyzer)
+spreadsheet_manager = LazyProxy(SpreadsheetManager)
 
 
 def _resolve_thread_pool_size() -> int:
     """Return thread pool size from env or sensible default."""
-    cpu_bound_default = max(2, min(32, (os.cpu_count() or 1) * 5))
+    cpu_count = os.cpu_count() or 1
+    # cap default to 4 workers to reduce idle memory footprint
+    conservative_default = max(2, min(4, cpu_count))
     env_value = os.getenv('THREAD_POOL_MAX_WORKERS')
     if env_value:
         try:
@@ -51,19 +80,36 @@ def _resolve_thread_pool_size() -> int:
             logger.warning(
                 "Invalid THREAD_POOL_MAX_WORKERS value '%s'. Falling back to default %s",
                 env_value,
-                cpu_bound_default,
+                conservative_default,
             )
-    return cpu_bound_default
+    return conservative_default
 
 
-THREAD_POOL_MAX_WORKERS = _resolve_thread_pool_size()
+_EXECUTOR = None
+_EXECUTOR_LOCK = threading.Lock()
 
-# Inisialisasi ThreadPoolExecutor untuk membatasi worker paralel
-executor = ThreadPoolExecutor(
-    max_workers=THREAD_POOL_MAX_WORKERS,
-    thread_name_prefix="bot-worker",
-)
-logger.info("ThreadPoolExecutor initialized with %s workers", THREAD_POOL_MAX_WORKERS)
+
+def _get_executor() -> ThreadPoolExecutor:
+    global _EXECUTOR
+    if _EXECUTOR is None:
+        with _EXECUTOR_LOCK:
+            if _EXECUTOR is None:
+                max_workers = _resolve_thread_pool_size()
+                _EXECUTOR = ThreadPoolExecutor(
+                    max_workers=max_workers,
+                    thread_name_prefix="bot-worker",
+                )
+                logger.info("ThreadPoolExecutor initialized with %s workers", max_workers)
+    return _EXECUTOR
+
+
+def _shutdown_executor():
+    global _EXECUTOR
+    if _EXECUTOR is not None:
+        _EXECUTOR.shutdown(wait=False)
+
+
+atexit.register(_shutdown_executor)
 
 ALLOWED_CHANNELS = os.getenv('ALLOWED_CHANNELS', '').split(',')
 FORWARD_CHANNEL_ID = os.getenv('FORWARD_CHANNEL_ID', '').split(',')
@@ -118,7 +164,7 @@ def slack_events():
             event = data.get('event', {})
             if event.get('type') == 'app_mention':
                 # Jalankan handle_app_mention di worker pool
-                executor.submit(handle_app_mention, event)
+                _get_executor().submit(handle_app_mention, event)
         return jsonify({'status': 'ok'})
     except Exception as e:
         logger.error(f"Error handling Slack event: {str(e)}")
@@ -340,7 +386,7 @@ def handle_app_mention(event):
                         thread_ts=ts
                     )
                 else:
-                    executor.submit(process_thread_data, thread_data, channel, user, ts, from_value, sheet_name)
+                    _get_executor().submit(process_thread_data, thread_data, channel, user, ts, from_value, sheet_name)
                     slack_bot.send_message(
                         channel,
                         f"✅ Sudah masuk ke List PQF",
@@ -353,9 +399,9 @@ def handle_app_mention(event):
                     thread_ts=ts
                 )
         elif 'resolution' in text_lower:
-            executor.submit(process_resolution_or_resolve_command, event, text_lower)
+            _get_executor().submit(process_resolution_or_resolve_command, event, text_lower)
         elif 'resolve' in text_lower:
-            executor.submit(process_resolution_or_resolve_command, event, text_lower)
+            _get_executor().submit(process_resolution_or_resolve_command, event, text_lower)
         elif 'ticket' in text_lower:
             process_ticket_command(channel, thread_ts=ts)
         elif 'confirm bug' in text_lower or 'feedback' in text_lower:
@@ -722,8 +768,6 @@ def process_ticket_command(channel, thread_ts=None):
                 # Tambahan: update kolom Related Ticket pada spreadsheet utama
                 code_value = code_str
                 link_message = permalink
-                from spreadsheet import SpreadsheetManager
-                spreadsheet_manager = SpreadsheetManager()
                 found = False
                 for sheet in spreadsheet_manager.get_available_sheets():
                     links = [l.split('&cid=')[0] if l else l for l in spreadsheet_manager.get_all_links(sheet)]
