@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import os
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -125,19 +125,122 @@ class SheetsClient:
 
 		return response
 
-	def clear_range(self, range_: str) -> Dict:
-		"""Clear values within ``range_`` while keeping formatting intact."""
-
+	def get_available_sheets(self) -> List[str]:
+		"""Get list of sheet names."""
 		try:
-			response = self._service.spreadsheets().values().clear(
-				spreadsheetId=self.spreadsheet_id,
-				range=range_,
-				body={},
-			).execute()
-		except HttpError as exc:  # pragma: no cover
-			raise RuntimeError(f"Sheets API error clearing range: {exc}") from exc
+			result = self._service.spreadsheets().get(spreadsheetId=self.spreadsheet_id).execute()
+			return [sheet['properties']['title'] for sheet in result.get('sheets', [])]
+		except HttpError as exc:
+			raise RuntimeError(f"Sheets API error getting sheets: {exc}") from exc
 
-		return response
+	def create_sheet_if_not_exists(self, sheet_name: str) -> bool:
+		"""Create sheet if it doesn't exist."""
+		try:
+			# Check if sheet already exists
+			available_sheets = self.get_available_sheets()
+			if sheet_name in available_sheets:
+				return True
+
+			# Create new sheet
+			requests = [{
+				'addSheet': {
+					'properties': {
+						'title': sheet_name
+					}
+				}
+			}]
+
+			self._service.spreadsheets().batchUpdate(
+				spreadsheetId=self.spreadsheet_id,
+				body={'requests': requests}
+			).execute()
+
+			return True
+
+		except HttpError as exc:
+			raise RuntimeError(f"Sheets API error creating sheet: {exc}") from exc
+
+	def prepend_row(self, data: Dict[str, Any], sheet_name: str) -> bool:
+		"""Prepend a row with the given data dict."""
+		try:
+			# Convert dict to list in the expected order
+			row_values = [
+				data.get('from', ''),
+				data.get('type', ''),
+				'',  # Number of Feedback
+				data.get('product', ''),
+				data.get('role', ''),
+				data.get('fitur', ''),
+				data.get('reporter', ''),
+				data.get('reporting_date_time', ''),
+				data.get('response_time', ''),
+				'',  # Resolution Time
+				'',  # Deployment Time
+				'',  # Response Time (Days) SLA
+				'',  # Resolution Time (Days) SLA
+				'',  # Resolve Time (Days) SLA
+				'',  # SLA Status Record
+				data.get('responder', ''),
+				data.get('description', ''),
+				'',  # Step Reproduce
+				data.get('severity', ''),
+				data.get('urgency', ''),
+				'',  # SLA
+				'',  # Assignee
+				'',  # Status
+				'',  # Scheduled Release On
+				data.get('link', ''),
+				''   # Related Ticket
+			]
+
+			# Insert a new row at position 2 (after header)
+			requests = [{
+				"insertDimension": {
+					"range": {
+						"sheetId": self._get_sheet_id(sheet_name),
+						"dimension": "ROWS",
+						"startIndex": 1,
+						"endIndex": 2
+					},
+					"inheritFromBefore": False
+				}
+			}]
+
+			self._service.spreadsheets().batchUpdate(
+				spreadsheetId=self.spreadsheet_id,
+				body={"requests": requests}
+			).execute()
+
+			# Update the new row with data
+			self.update_values(f"{sheet_name}!A2", [row_values])
+
+			return True
+
+		except HttpError as exc:
+			raise RuntimeError(f"Sheets API error prepending row: {exc}") from exc
+
+	def _get_sheet_id(self, sheet_name: str) -> int:
+		"""Get the sheet ID for the given sheet name."""
+		try:
+			result = self._service.spreadsheets().get(spreadsheetId=self.spreadsheet_id).execute()
+			for sheet in result.get('sheets', []):
+				if sheet['properties']['title'] == sheet_name:
+					return sheet['properties']['sheetId']
+			raise ValueError(f"Sheet '{sheet_name}' not found")
+		except HttpError as exc:
+			raise RuntimeError(f"Sheets API error getting sheet ID: {exc}") from exc
+
+	def get_all_links(self, sheet_name: str) -> List[str]:
+		"""Get all links from column I (assuming links are in column I)."""
+		range_ = f"{sheet_name}!I:I"
+		values = self.get_values(range_)
+		return [row[0] if row else '' for row in values]
+
+	def get_all_codes(self, sheet_name: str) -> List[str]:
+		"""Get all codes from column C (assuming codes are in column C)."""
+		range_ = f"{sheet_name}!C:C"
+		values = self.get_values(range_)
+		return [row[0] if row else '' for row in values]
 
 
 __all__ = ["SheetsClient"]
