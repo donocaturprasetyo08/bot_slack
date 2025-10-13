@@ -19,4 +19,4 @@ COPY . .
 ENV PORT=3000
 
 # Use gunicorn to serve the Flask app
-CMD ["sh", "-c", "gunicorn -w ${WEB_CONCURRENCY:-4} -b 0.0.0.0:${PORT:-3000} apps:app"]
+CMD ["sh", "-c", "gunicorn -w ${WEB_CONCURRENCY:-1} -b 0.0.0.0:${PORT:-3000} apps:app"]
