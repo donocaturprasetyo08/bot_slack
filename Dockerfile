@@ -1,4 +1,4 @@
-# Dockerfile for deploying the Slack Thread Analyzer Bot on Railway
+# Dockerfile for deploying the Slack Thread Analyzer Bot on AWS
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -8,15 +8,15 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Install Python dependencies
-COPY requirements.txt ./
+COPY requirements-new.txt ./
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements-new.txt
 
 # Copy the application code
 COPY . .
 
-# Railway injects PORT; default to 3000 for local runs
+# AWS injects PORT; default to 3000 for local runs
 ENV PORT=3000
 
-# Use gunicorn to serve the Flask app
-CMD ["sh", "-c", "gunicorn -w ${WEB_CONCURRENCY:-1} -b 0.0.0.0:${PORT:-3000} apps:app"]
+# Use uvicorn to serve the FastAPI app
+CMD ["sh", "-c", "uvicorn run:app --host 0.0.0.0 --port ${PORT:-3000} --workers ${WEB_CONCURRENCY:-1}"]
