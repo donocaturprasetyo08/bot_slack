@@ -812,6 +812,7 @@ def process_ticket_command(channel, thread_ts=None):
                 # Kirim response ke thread forward (bukan thread asli)
                 slack_bot.send_message(channel_asli, f"✅ Ticketmu sudah tercatat di bug tracking dengan kode: {code_str}", thread_ts=thread_ts_asli)
             else:
+                slack_bot.send_message(channel_asli, f"❌ Ticketmu duplikat karena sudah pernah tercatat di bug tracking", thread_ts=thread_ts_asli)
                 logger.info("Duplicate bug detected, skipping update of Related Ticket column.")
         except Exception as e:
             logger.error(f"Error mencatat bug: {str(e)}")
