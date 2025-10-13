@@ -41,6 +41,7 @@ executor = ThreadPoolExecutor(max_workers=2)  # Bisa disesuaikan sesuai kebutuha
 
 ALLOWED_CHANNELS = os.getenv('ALLOWED_CHANNELS', '').split(',')
 FORWARD_CHANNEL_ID = os.getenv('FORWARD_CHANNEL_ID', '').split(',')
+PQF_CHANNEL_ID = os.getenv('PQF_CHANNEL_ID', '').split(',')
 
 def validate_and_extract_command(text):
     """
@@ -327,11 +328,41 @@ def handle_app_mention(event):
                     thread_ts=ts
                 )
         elif 'resolution' in text_lower:
+            if channel not in PQF_CHANNEL_ID:
+                slack_bot.send_message(
+                    channel,
+                    "Saat ini bot tidak dapat menindaklanjuti issue melalui kolom komentar. Informasi terkait bug/issue/feedback tersebut sudah kami terima dan sedang diproses oleh tim kami. Pembaruan dan respon akan disampaikan oleh tim kami setelah ada perkembangan lebih lanjut. Terimakasih.",
+                    thread_ts=ts
+                )
+                return
             executor.submit(process_resolution_or_resolve_command, event, text_lower)
         elif 'resolve' in text_lower:
+            if channel not in PQF_CHANNEL_ID:
+                slack_bot.send_message(
+                    channel,
+                    "Saat ini bot tidak dapat menindaklanjuti issue melalui kolom komentar. Informasi terkait bug/issue/feedback tersebut sudah kami terima dan sedang diproses oleh tim kami. Pembaruan dan respon akan disampaikan oleh tim kami setelah ada perkembangan lebih lanjut. Terimakasih.",
+                    thread_ts=ts
+                )
+                return
             executor.submit(process_resolution_or_resolve_command, event, text_lower)
         elif 'ticket' in text_lower:
+            if channel not in FORWARD_CHANNEL_ID:
+                slack_bot.send_message(
+                    channel,
+                    "Saat ini bot tidak dapat menindaklanjuti issue melalui kolom komentar. Informasi terkait bug/issue/feedback tersebut sudah kami terima dan sedang diproses oleh tim kami. Pembaruan dan respon akan disampaikan oleh tim kami setelah ada perkembangan lebih lanjut. Terimakasih.",
+                    thread_ts=ts
+                )
+                return
             process_ticket_command(channel, thread_ts=ts)
+        elif 'closed' in text_lower:
+            if channel not in PQF_CHANNEL_ID:
+                slack_bot.send_message(
+                    channel,
+                    "Saat ini bot tidak dapat menindaklanjuti issue melalui kolom komentar. Informasi terkait bug/issue/feedback tersebut sudah kami terima dan sedang diproses oleh tim kami. Pembaruan dan respon akan disampaikan oleh tim kami setelah ada perkembangan lebih lanjut. Terimakasih.",
+                    thread_ts=ts
+                )
+                return
+            executor.submit(process_closed_command, event, text_lower)
         elif 'confirm bug' in text_lower or 'feedback' in text_lower:
             # Ambil sheet_name dari command terakhir jika ada, atau fallback
             from_value, sheet_name, _ = validate_and_extract_command(text)
@@ -394,7 +425,7 @@ def process_thread_data(thread_data, channel, user, thread_ts, from_value="Inter
                         if user_info:
                             profile = user_info.get('profile', {})
                             email = profile.get('email', '').lower()
-                            if email in ['asyrof@qiscus.com', 'faris@qiscus.com', 'rahmad@qiscus.net', 'donoquip@gmail.com']:
+                            if email in ['asyrof@qiscus.com', 'faris@qiscus.com', 'rahmad@qiscus.net', 'rachmad.fauzi@qisc.us', 'lintang@qiscus.live', 'dhiazulfa@qiscus.com', 'donocatur@qiscus.cx']:
                                 reply_ts = reply.get('ts')
                                 if reply_ts and (first_response_ts is None or float(reply_ts) < float(first_response_ts)):
                                     first_response_ts = reply_ts
@@ -406,7 +437,7 @@ def process_thread_data(thread_data, channel, user, thread_ts, from_value="Inter
                         if user_info:
                             profile = user_info.get('profile', {})
                             email = profile.get('email', '').lower()
-                            if email in ['asyrof@qiscus.com', 'faris@qiscus.com', 'rahmad@qiscus.net', 'donoquip@gmail.com']:
+                            if email in ['asyrof@qiscus.com', 'faris@qiscus.com', 'rahmad@qiscus.net', 'rachmad.fauzi@qisc.us', 'lintang@qiscus.live', 'dhiazulfa@qiscus.com', 'donocatur@qiscus.cx']:
                                 responder_name = user_info.get('real_name', user_info.get('name', user_id))
                                 if responder_name not in responder_names:
                                     responder_names.append(responder_name)
@@ -453,6 +484,8 @@ def process_thread_data(thread_data, channel, user, thread_ts, from_value="Inter
                 'urgency': analysis.get('urgency', 'Medium')
             }
             logger.info(f"Attempting to prepend row to sheet: {sheet_name}")
+            # Pastikan sheet sudah ada sebelum prepend_row
+            spreadsheet_manager.create_sheet_if_not_exists(sheet_name)
             success = spreadsheet_manager.prepend_row(row_data, sheet_name)
             if success:
                 logger.info(f"Successfully added row to sheet: {sheet_name}")
@@ -539,6 +572,71 @@ def process_resolution_or_resolve_command(event, text_lower):
                 slack_bot.send_message(channel, custom_message, thread_ts=ts)
             else:
                 slack_bot.send_message(channel, f"<@{user}> Gagal update kolom *{col_name}* pada sheet *{sheet_name}*.", thread_ts=ts)
+            found = True
+            break
+    if not found:
+        slack_bot.send_message(channel, f"<@{user}>Saat ini bot tidak dapat menindaklanjuti issue melalui kolom komentar.Kami sudah mencatat informasi ini dan akan menindaklanjutinya secara manual. Terima kasih atas kesabarannya!", thread_ts=ts)
+
+def process_closed_command(event, text_lower):
+    channel = event.get('channel')
+    ts = event.get('ts')
+    user = event.get('user')
+    thread_ts = event.get('thread_ts') or ts
+
+    # Ambil data thread
+    thread_data = slack_bot.get_thread_data(channel, thread_ts)
+    if not thread_data:
+        slack_bot.send_message(channel, f"<@{user}> Tidak dapat mengambil data thread.", thread_ts=ts)
+        return
+
+    permalink = thread_data.get('permalink', '')
+    if '&cid=' in permalink:
+        permalink = permalink.split('&cid=')[0]
+
+    # Cari sheet yang mengandung link ini
+    found = False
+    for sheet_name in spreadsheet_manager.get_available_sheets():
+        links = [l.split('&cid=')[0] if l else l for l in spreadsheet_manager.get_all_links(sheet_name)]
+        if permalink in links:
+            # Update kedua kolom sekaligus
+            from datetime import datetime
+            now = datetime.now().strftime('%Y-%m-%d %H:%M')
+            updated_resolution = spreadsheet_manager.update_column_by_link(sheet_name, permalink, 'Resolution Time', now)
+            updated_deployment = spreadsheet_manager.update_column_by_link(sheet_name, permalink, 'Deployment Time', now)
+            # Ambil nama reporter dari thread
+            reporter_name = "Reporter"
+            reporter_id = None
+            # Coba ambil dari thread_data['reporter'] jika ada
+            if thread_data.get('reporter'):
+                reporter_id = thread_data.get('reporter')
+            else:
+                # Coba ambil dari analysis jika ada
+                analysis = None
+                try:
+                    analysis = gemini_analyzer.analyze_thread(thread_data)
+                except Exception:
+                    analysis = None
+                if analysis and analysis.get('reporter'):
+                    reporter_id = analysis.get('reporter')
+            if reporter_id:
+                # Gunakan mention jika reporter_id ada
+                reporter_name = f"<@{reporter_id}>"
+            else:
+                # Fallback ke nama jika tidak ada id
+                user_info = slack_bot.get_user_info(reporter_id)
+                if user_info:
+                    reporter_name = user_info.get('real_name', user_info.get('name', 'Reporter'))
+            # Kirim pesan jika kedua kolom berhasil diupdate
+            if updated_resolution and updated_deployment:
+                custom_message = f"Halo {reporter_name} 👋\n\nSTATUS: ✅ Closed.\nTerima kasih atas laporan serta kolaborasinya 🙏.\n\nSalam,\nTim Profeat"
+                slack_bot.send_message(channel, custom_message, thread_ts=ts)
+            else:
+                failed_cols = []
+                if not updated_resolution:
+                    failed_cols.append('Resolution Time')
+                if not updated_deployment:
+                    failed_cols.append('Deployment Time')
+                slack_bot.send_message(channel, f"<@{user}> Gagal update kolom *{', '.join(failed_cols)}* pada sheet *{sheet_name}*.", thread_ts=ts)
             found = True
             break
     if not found:
