@@ -603,6 +603,52 @@ def process_closed_command(event, text_lower):
             now = datetime.now().strftime('%Y-%m-%d %H:%M')
             updated_resolution = spreadsheet_manager.update_column_by_link(sheet_name, permalink, 'Resolution Time', now)
             updated_deployment = spreadsheet_manager.update_column_by_link(sheet_name, permalink, 'Deployment Time', now)
+            # --- Tambahan: Update kolom responder dan response_time jika ada reply dari whitelist ---
+            responder_names = []
+            response_time = None
+            first_response_ts = None
+            found_reply = False
+            whitelist_emails = [
+                'asyrof@qiscus.com', 'faris@qiscus.com', 'rahmad@qiscus.net',
+                'rachmad.fauzi@qisc.us', 'lintang@qiscus.live', 'dhiazulfa@qiscus.com', 'donocatur@qiscus.cx'
+            ]
+            if thread_data.get('replies'):
+                for reply in thread_data['replies']:
+                    user_id = reply.get('user')
+                    if user_id:
+                        user_info = slack_bot.get_user_info(user_id)
+                        if user_info:
+                            profile = user_info.get('profile', {})
+                            email = profile.get('email', '').lower()
+                            if email in whitelist_emails:
+                                reply_ts = reply.get('ts')
+                                if reply_ts and (first_response_ts is None or float(reply_ts) < float(first_response_ts)):
+                                    first_response_ts = reply_ts
+                                    found_reply = True
+                for reply in thread_data['replies']:
+                    user_id = reply.get('user')
+                    if user_id:
+                        user_info = slack_bot.get_user_info(user_id)
+                        if user_info:
+                            profile = user_info.get('profile', {})
+                            email = profile.get('email', '').lower()
+                            if email in whitelist_emails:
+                                responder_name = user_info.get('real_name', user_info.get('name', user_id))
+                                if responder_name not in responder_names:
+                                    responder_names.append(responder_name)
+            # Hanya update jika ada reply dari whitelist
+            if found_reply and first_response_ts:
+                from datetime import datetime
+                dt = datetime.fromtimestamp(float(first_response_ts))
+                response_time = dt.strftime('%Y-%m-%d %H:%M')
+                responder_name_str = ', '.join(responder_names) if responder_names else None
+                if responder_name_str:
+                    spreadsheet_manager.update_column_by_link(sheet_name, permalink, 'Responder', responder_name_str)
+                if response_time:
+                    spreadsheet_manager.update_column_by_link(sheet_name, permalink, 'Response Date Time', response_time)
+            # --- END Tambahan ---
+
+            
             # Ambil nama reporter dari thread
             reporter_name = "Reporter"
             reporter_id = None
