@@ -430,17 +430,21 @@ class SheetsClientFactory:
     @staticmethod
     def create_main_client() -> SheetsClient:
         """Create a SheetsClient for main spreadsheet operations."""
+        from config import config
+
         return SheetsClient(
-            credentials_b64=os.getenv("GOOGLE_SHEETS_CREDENTIALS_B64"),
-            spreadsheet_id=os.getenv("SPREADSHEET_ID"),
+            credentials_b64=config.google_credentials_b64,
+            spreadsheet_id=config.spreadsheet_id,
         )
 
     @staticmethod
     def create_bug_client() -> SheetsClient:
         """Create a SheetsClient for bug tracking operations."""
+        from config import config
+
         return SheetsClient(
-            credentials_b64=os.getenv("GOOGLE_SHEETS_CREDENTIALS_B64"),
-            spreadsheet_id=os.getenv("SPREADSHEET_ID_BUG"),
+            credentials_b64=config.google_credentials_b64,
+            spreadsheet_id=config.spreadsheet_id_bug,
         )
 
 

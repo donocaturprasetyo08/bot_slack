@@ -1,11 +1,13 @@
 # Forwarder utilities for Slack bot
 
-import os
 import logging
 from datetime import datetime
 from typing import Optional
 
+from config import config
+
 logger = logging.getLogger(__name__)
+
 
 def forward_message(
     slack_client,
@@ -15,7 +17,7 @@ def forward_message(
     week_num: int,
     dt: datetime,
     success: bool = True,
-    extra_text: Optional[str] = None
+    extra_text: Optional[str] = None,
 ) -> bool:
     """Forward a message to the configured channel.
 
@@ -33,24 +35,23 @@ def forward_message(
         True if forwarded successfully, False otherwise.
     """
     try:
-        forward_channel = os.getenv('FORWARD_CHANNEL_ID')
+        forward_channel = config.forward_channel_id
         if not forward_channel:
             logger.info("No FORWARD_CHANNEL_ID set, skipping forward")
             return False
 
-        permalink = thread_data.get('permalink', '')
-        if '&cid=' in permalink:
-            permalink = permalink.split('&cid=')[0]
+        permalink = thread_data.get("permalink", "")
+        if "&cid=" in permalink:
+            permalink = permalink.split("&cid=")[0]
 
         status = "Tercatat" if success else "Tidak Tercatat"
-        month_name = dt.strftime('%B')
+        month_name = dt.strftime("%B")
         info_text = f"[{quarter}] [{tahun}] [Week {week_num}] [Date {dt.day} - {month_name}] [{status}]"
         if extra_text:
             info_text += extra_text
 
         slack_client.chat_postMessage(
-            channel=forward_channel,
-            text=info_text + "\n" + permalink
+            channel=forward_channel, text=info_text + "\n" + permalink
         )
         logger.info(f"Forwarded message to {forward_channel}: {info_text}")
         return True

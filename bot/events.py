@@ -1,11 +1,11 @@
 import logging
-import os
 from datetime import datetime
 
 from bot.command import handle_command
 from bot.forwarder import forward_message
 from bot.helpers import parse_analysis_response, prepare_thread_content
 from bot.slack_helper import SlackHelper
+from config import config
 from library import llm, sheets
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ def _get_sheets_client() -> sheets.SheetsClient:
     return _sheets_client
 
 
-ALLOWED_CHANNELS = os.getenv("ALLOWED_CHANNELS", "").split(",")
-FORWARD_CHANNEL_ID = os.getenv("FORWARD_CHANNEL_ID", "").split(",")
+ALLOWED_CHANNELS = config.allowed_channels_list
+FORWARD_CHANNEL_ID = config.forward_channel_id_list
 
 
 def parse_command(text):
