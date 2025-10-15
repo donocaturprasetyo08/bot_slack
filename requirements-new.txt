@@ -11,6 +11,7 @@ langgraph==0.6.10
 langgraph-checkpoint==2.1.2
 langgraph-prebuilt==0.6.4
 langgraph-sdk==0.2.9
+pre-commit==4.3.0
 python-dotenv==1.0.0
 requests==2.31.0
 slack-sdk==3.23.0

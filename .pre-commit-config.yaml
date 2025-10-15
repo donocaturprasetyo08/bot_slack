@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/PyCQA/autoflake
+    rev: v2.2.1  # Use latest stable
+    hooks:
+      - id: autoflake
+        args: [--remove-all-unused-imports, --remove-unused-variables, --in-place]
+        exclude: ^.venv/
+
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        args: [--fast]
+        exclude: ^.venv/
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: [--profile=black]
+        exclude: ^.venv/
