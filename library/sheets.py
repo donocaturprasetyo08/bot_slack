@@ -160,64 +160,127 @@ class SheetsClient:
 		except HttpError as exc:
 			raise RuntimeError(f"Sheets API error creating sheet: {exc}") from exc
 
-	def prepend_row(self, data: Dict[str, Any], sheet_name: str) -> bool:
-		"""Prepend a row with the given data dict."""
+	def prepend_row(self, data: Dict[str, Any], sheet_name: str, sheet_type: str = "main") -> bool:
+		"""Prepend a row with the given data dict. Supports different sheet types."""
 		try:
-			# Convert dict to list in the expected order
-			row_values = [
-				data.get('from', ''),
-				data.get('type', ''),
-				'',  # Number of Feedback
-				data.get('product', ''),
-				data.get('role', ''),
-				data.get('fitur', ''),
-				data.get('reporter', ''),
-				data.get('reporting_date_time', ''),
-				data.get('response_time', ''),
-				'',  # Resolution Time
-				'',  # Deployment Time
-				'',  # Response Time (Days) SLA
-				'',  # Resolution Time (Days) SLA
-				'',  # Resolve Time (Days) SLA
-				'',  # SLA Status Record
-				data.get('responder', ''),
-				data.get('description', ''),
-				'',  # Step Reproduce
-				data.get('severity', ''),
-				data.get('urgency', ''),
-				'',  # SLA
-				'',  # Assignee
-				'',  # Status
-				'',  # Scheduled Release On
-				data.get('link', ''),
-				''   # Related Ticket
-			]
-
-			# Insert a new row at position 2 (after header)
-			requests = [{
-				"insertDimension": {
-					"range": {
-						"sheetId": self._get_sheet_id(sheet_name),
-						"dimension": "ROWS",
-						"startIndex": 1,
-						"endIndex": 2
-					},
-					"inheritFromBefore": False
-				}
-			}]
-
-			self._service.spreadsheets().batchUpdate(
-				spreadsheetId=self.spreadsheet_id,
-				body={"requests": requests}
-			).execute()
-
-			# Update the new row with data
-			self.update_values(f"{sheet_name}!A2", [row_values])
-
-			return True
+			if sheet_type == "main":
+				return self._prepend_main_row(data, sheet_name)
+			elif sheet_type == "bug":
+				return self._prepend_bug_row(data, sheet_name)
+			else:
+				raise ValueError(f"Unsupported sheet_type: {sheet_type}")
 
 		except HttpError as exc:
 			raise RuntimeError(f"Sheets API error prepending row: {exc}") from exc
+
+	def _prepend_main_row(self, data: Dict[str, Any], sheet_name: str) -> bool:
+		"""Prepend a row for main sheets with SLA formulas."""
+		# Formulas for SLA calculations (row 2)
+		row_num = 2
+		response_time_sla_formula = f'=IF(ISBLANK(I{row_num}), "Waiting Response", IF(H{row_num} = I{row_num}, 1, NETWORKDAYS(H{row_num}, I{row_num}) - 1))'
+		resolution_time_sla_formula = f'=IF(ISBLANK(J{row_num}), "Waiting Solution", IF(H{row_num} = J{row_num}, 1, NETWORKDAYS(H{row_num}, J{row_num}) - 1))'
+		resolve_time_sla_formula = f'=IF(AND(ISBLANK(J{row_num}), ISBLANK(K{row_num})), "Waiting Solution", IF(ISBLANK(K{row_num}), "Feedback on progress", IF(H{row_num} = K{row_num}, 1, NETWORKDAYS(H{row_num}, K{row_num}) - 1)))'
+		sla_status_record_formula = f'=IFS(AND(ISBLANK(J{row_num}), ISBLANK(K{row_num})), "Waiting Solution", ISBLANK(K{row_num}), "Feedback on progress", N{row_num} <= U{row_num}, "MEET SLA", N{row_num} > U{row_num}, "OVER SLA")'
+		sla_formula = f'=IF(T{row_num}="High",3,IF(T{row_num}="Medium",13,IF(T{row_num}="Low",30,"FALSE")))'
+
+		# Convert dict to list in the expected order with formulas
+		row_values = [
+			data.get('from', ''),
+			data.get('type', ''),
+			'',  # Number of Feedback
+			data.get('product', ''),
+			data.get('role', ''),
+			data.get('fitur', ''),
+			data.get('reporter', ''),
+			data.get('reporting_date_time', ''),
+			data.get('response_time', ''),
+			'',  # Resolution Time
+			'',  # Deployment Time
+			response_time_sla_formula,  # Response Time (Days) SLA
+			resolution_time_sla_formula,  # Resolution Time (Days) SLA
+			resolve_time_sla_formula,  # Resolve Time (Days) SLA
+			sla_status_record_formula,  # SLA Status Record
+			data.get('responder', ''),
+			data.get('description', ''),
+			'',  # Step Reproduce
+			data.get('severity', ''),
+			data.get('urgency', ''),
+			sla_formula,  # SLA
+			'',  # Assignee
+			'',  # Status
+			'',  # Scheduled Release On
+			data.get('link', ''),
+			''   # Related Ticket
+		]
+
+		# Insert a new row at position 2 (after header)
+		requests = [{
+			"insertDimension": {
+				"range": {
+					"sheetId": self._get_sheet_id(sheet_name),
+					"dimension": "ROWS",
+					"startIndex": 1,
+					"endIndex": 2
+				},
+				"inheritFromBefore": False
+			}
+		}]
+
+		self._service.spreadsheets().batchUpdate(
+			spreadsheetId=self.spreadsheet_id,
+			body={"requests": requests}
+		).execute()
+
+		# Update the new row with data
+		self.update_values(f"{sheet_name}!A2", [row_values])
+
+		return True
+
+	def _prepend_bug_row(self, data: Dict[str, Any], sheet_name: str) -> bool:
+		"""Prepend a row for bug sheets without formulas."""
+		# Convert dict to list for bug tracking (no formulas needed)
+		row_values = [
+			data.get('from', ''),
+			data.get('type', ''),
+			data.get('code', ''),  # Code column for bug tracking
+			data.get('product', ''),
+			data.get('role', ''),
+			data.get('fitur', ''),
+			data.get('reporter', ''),
+			data.get('reporting_date_time', ''),
+			data.get('deskripsi', ''),  # Description for bugs
+			'',  # Step Reproduce
+			data.get('severity', ''),
+			data.get('urgency', ''),
+			'',  # Assignee
+			'',  # Status
+			'',  # Scheduled Release On
+			data.get('link', ''),
+			''   # Note
+		]
+
+		# Insert a new row at position 2 (after header)
+		requests = [{
+			"insertDimension": {
+				"range": {
+					"sheetId": self._get_sheet_id(sheet_name),
+					"dimension": "ROWS",
+					"startIndex": 1,
+					"endIndex": 2
+				},
+				"inheritFromBefore": False
+			}
+		}]
+
+		self._service.spreadsheets().batchUpdate(
+			spreadsheetId=self.spreadsheet_id,
+			body={"requests": requests}
+		).execute()
+
+		# Update the new row with data
+		self.update_values(f"{sheet_name}!A2", [row_values])
+
+		return True
 
 	def _get_sheet_id(self, sheet_name: str) -> int:
 		"""Get the sheet ID for the given sheet name."""
@@ -242,5 +305,87 @@ class SheetsClient:
 		values = self.get_values(range_)
 		return [row[0] if row else '' for row in values]
 
+	def update_column_by_link(self, sheet_name: str, link: str, column_name: str, value: str) -> bool:
+		"""Update a specific column for the row where 'Link Message' matches link."""
+		try:
+			# Get all data to find the row with matching link
+			all_data = self.get_all_data(sheet_name)
+			if not all_data or len(all_data) < 2:
+				return False
 
-__all__ = ["SheetsClient"]
+			header = all_data[0]
+			try:
+				link_idx = header.index('Link Message')
+				col_idx = header.index(column_name)
+			except ValueError:
+				return False
+
+			# Find the row with matching link
+			clean_link = link.split('&cid=')[0] if link else link
+			for i, row in enumerate(all_data[1:], start=2):  # start=2 for 1-based row number
+				if len(row) > link_idx:
+					row_link = row[link_idx].split('&cid=')[0] if row[link_idx] else ''
+					if row_link == clean_link:
+						cell = f"{self._get_column_letter(col_idx + 1)}{i}"
+						self.update_values(f"{sheet_name}!{cell}", [[value]])
+						return True
+			return False
+		except HttpError as exc:
+			raise RuntimeError(f"Sheets API error updating column: {exc}") from exc
+
+	def get_all_data(self, sheet_name: str) -> Optional[List[List[str]]]:
+		"""Get all data from the spreadsheet."""
+		try:
+			# Get headers first to determine column count
+			headers = [
+				'From', 'Type', 'Number of Feedback', 'Product', 'Role', 'Modul/Fitur',
+				'Reporter', 'Reporting Date Time', 'Response Time', 'Resolution Time',
+				'Deployment Time', 'Response Time (Days) SLA', 'Resolution Time (Days) SLA',
+				'Resolve Time (Days) SLA', 'SLA Status Record', 'Responder', 'Deskripsi',
+				'Step Reproduce', 'Severity', 'Urgency', 'SLA', 'Assignee', 'Status',
+				'Scheduled Release On', 'Link Message', 'Related Ticket'
+			]
+			num_cols = len(headers)
+			last_col = self._get_column_letter(num_cols)
+			data_range = f'A:{last_col}'
+			result = self._service.spreadsheets().values().get(
+				spreadsheetId=self.spreadsheet_id,
+				range=f'{sheet_name}!{data_range}'
+			).execute()
+
+			return result.get('values', [])
+
+		except HttpError as exc:
+			raise RuntimeError(f"Sheets API error getting data: {exc}") from exc
+
+	@staticmethod
+	def _get_column_letter(n: int) -> str:
+		"""Convert column number to letter (1 = A, 26 = Z, 27 = AA, etc.)."""
+		result = ''
+		while n > 0:
+			n, remainder = divmod(n - 1, 26)
+			result = chr(65 + remainder) + result
+		return result
+
+
+class SheetsClientFactory:
+	"""Factory for creating different types of SheetsClient instances."""
+
+	@staticmethod
+	def create_main_client() -> SheetsClient:
+		"""Create a SheetsClient for main spreadsheet operations."""
+		return SheetsClient(
+			credentials_b64=os.getenv("GOOGLE_SHEETS_CREDENTIALS_B64"),
+			spreadsheet_id=os.getenv("SPREADSHEET_ID")
+			)
+
+	@staticmethod
+	def create_bug_client() -> SheetsClient:
+		"""Create a SheetsClient for bug tracking operations."""
+		return SheetsClient(
+			credentials_b64=os.getenv("GOOGLE_SHEETS_CREDENTIALS_B64"),
+			spreadsheet_id=os.getenv("SPREADSHEET_ID_BUG")
+			)
+
+
+__all__ = ["SheetsClient", "SheetsClientFactory"]

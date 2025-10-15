@@ -22,23 +22,7 @@ def _get_llm_service():
 def _get_sheets_client() -> sheets.SheetsClient:
     global _sheets_client
     if _sheets_client is None:
-        # Check for base64 encoded credentials JSON
-        credentials_b64 = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON_B64')
-        if credentials_b64:
-            _sheets_client = sheets.SheetsClient(credentials_b64=credentials_b64)
-        else:
-            # Check for credentials file path
-            credentials_path = os.getenv('GOOGLE_SHEETS_CREDENTIALS_FILES') or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-            if credentials_path and os.path.exists(credentials_path):
-                _sheets_client = sheets.SheetsClient(credentials_path=credentials_path)
-            else:
-                # Fallback to local credentials.json file
-                local_credentials = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'credentials.json')
-                if os.path.exists(local_credentials):
-                    _sheets_client = sheets.SheetsClient(credentials_path=local_credentials)
-                else:
-                    # Last resort - let SheetsClient handle the error
-                    _sheets_client = sheets.SheetsClient()
+        _sheets_client = sheets.SheetsClientFactory.create_main_client()
     return _sheets_client
 
 ALLOWED_CHANNELS = os.getenv('ALLOWED_CHANNELS', '').split(',')
